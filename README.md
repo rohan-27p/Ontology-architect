@@ -85,7 +85,7 @@ The DSL supports: `var`, `const`, `linear`, `add`, `mul`, `sin`, `cos`, `tanh`, 
 
 The following plot shows the environment running with the DSL oracle baseline (purple) vs a static persistence baseline (gray). The top rows show the *true hidden latent variables* (A, B, C) — which the agent never sees. The bottom rows show sensor predictions.
 
-![Discovery Plot](artifacts/discovery_plot.png)
+![Discovery Plot](artifacts/results/discovery_plot.png)
 
 Key observations:
 - **Latent A** exhibits autocatalytic damping — the oracle captures its trajectory
@@ -97,7 +97,7 @@ Key observations:
 
 The environment evaluates agents by tracking their `total_reward` across episodes, directly capturing their ability to adapt to falsification. The generated reward curve below plots the performance of various baseline agents (Random, Heuristic, and Oracle) over time.
 
-![Reward Curve Plot](artifacts/reward_curve.png)
+![Reward Curve Plot](artifacts/results/reward_curve.png)
 
 Key observations:
 - **Phase Transitions**: Highlighted in shaded vertical regions (e.g., green for Normal Science, red for Crisis).
