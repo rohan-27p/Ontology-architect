@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 artifacts/
 *.egg-info/
+test_results
+.claude/

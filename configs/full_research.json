@@ -37,12 +37,19 @@
   },
   "reward": {
     "mdl_lambda": 0.0005,
+    "mdl_complexity_mode": "ast",
     "prediction_sigma": 0.12,
     "anomaly_bonus": 2.0,
     "drift_bonus": 1.0,
     "false_paradigm_shift_penalty": 0.25,
+    "paradigm_shift_min_structural_delta": 0.15,
     "execution_error_penalty": -25.0,
     "max_theory_chars": 12000
+  },
+  "feedback": {
+    "peer_review_window": 8,
+    "lineage_window": 8,
+    "divergence_sigma": 2.0
   },
   "training": {
     "model_id": "",
@@ -51,6 +58,7 @@
     "report_dir": "artifacts/reports",
     "group_size": 4,
     "max_steps": 100,
-    "batch_size": 1
+    "batch_size": 1,
+    "checkpoint_steps": 10
   }
 }

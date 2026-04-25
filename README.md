@@ -21,11 +21,12 @@ The echo scaffold has been replaced with a research loop:
 
 - **Environment purpose:** discover compact ontologies for hidden latent ODE/SDE systems from raw sensor logs.
 - **Action contract:** `OntologyArchitectAction(theory_module=..., revision_note=..., paradigm_shift_claim=...)`.
-- **Observation contract:** one schema-guided text envelope with raw sensor logs, last execution output, peer review, and non-revealing metadata.
+- **Observation contract:** one schema-guided text envelope with raw sensor logs, last execution output, peer review, theory lineage, and non-revealing metadata.
 - **Theory API:** submitted code must define `class Theory` with `fit(history)`, `predict(window)`, and `log_prob(observations)`. Optional methods are `detect_drift(history)` and `describe()`.
-- **Reward:** environment-owned Gaussian future-window log likelihood minus `mdl_lambda * len(theory_module)`, plus rare-anomaly and hidden-drift adaptation bonuses.
+- **Reward:** environment-owned Gaussian future-window log likelihood minus AST-based MDL complexity, plus rare-anomaly and hidden-drift adaptation bonuses. Paradigm-shift credit is scaled by structural distance from the parent theory.
 - **Sandbox:** theory code runs in subprocess mode for local smoke tests or Docker container mode for full runs, with timeout, memory/container settings, and import checks. Allowed imports are stdlib plus NumPy/SciPy names configured in JSON.
-- **Training stages:** oracle curriculum generation, supervised fine-tuning entrypoint, and group reward optimization entrypoint.
+- **Feedback loop:** peer review includes per-sensor prediction error, first divergence timing, structured falsified-hypothesis records, and recent theory lineage.
+- **Training stages:** oracle curriculum generation, supervised fine-tuning entrypoint, and group reward optimization entrypoint with periodic intermediate checkpoints.
 - **Evaluation outputs:** JSON reports with discovery score, log likelihood, execution failure rate, and baseline comparisons.
 
 ## How To Run
@@ -104,7 +105,8 @@ uv run python -m ontology_architect.scripts.train_gro \
   --model-id <HF_MODEL_ID> \
   --output-dir artifacts/checkpoints/gro \
   --group-size 4 \
-  --max-steps 100
+  --max-steps 100 \
+  --checkpoint-steps 10
 ```
 
 Dry-run group reward optimization:
@@ -131,6 +133,8 @@ Build and run the Docker image:
 docker build -t ontology_architect-env:latest -f server/Dockerfile .
 docker run --rm -p 8000:8000 ontology_architect-env:latest
 ```
+
+The same `ontology_architect-env:latest` image is used by container sandbox mode. The sandbox mounts the local package into the container read-only and executes `sandbox_runner.py` with network disabled.
 
 ## Configuration
 

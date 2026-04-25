@@ -52,3 +52,6 @@ ontology-evaluate = "ontology_architect.scripts.evaluate:main"
 include-package-data = true
 packages = ["ontology_architect", "ontology_architect.server", "ontology_architect.scripts"]
 package-dir = { "ontology_architect" = ".", "ontology_architect.server" = "server", "ontology_architect.scripts" = "scripts" }
+
+[tool.pytest.ini_options]
+norecursedirs = ["artifacts"]
