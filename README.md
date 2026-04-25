@@ -11,189 +11,159 @@ tags:
   - openenv
 ---
 
-# Ontology Architect Environment
+# Ontology Architect
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+Ontology Architect is an OpenEnv-compatible research environment for code-driven scientific discovery. The agent receives noisy text logs from a simulated alien universe, submits a full Python theory module, and is rewarded for compact theories that predict hidden future observations.
 
-## Quick Start
+## What Was Implemented
 
-The simplest way to use the Ontology Architect environment is through the `OntologyArchitectEnv` class:
+The echo scaffold has been replaced with a research loop:
 
-```python
-from ontology_architect import OntologyArchitectAction, OntologyArchitectEnv
+- **Environment purpose:** discover compact ontologies for hidden latent ODE/SDE systems from raw sensor logs.
+- **Action contract:** `OntologyArchitectAction(theory_module=..., revision_note=..., paradigm_shift_claim=...)`.
+- **Observation contract:** one schema-guided text envelope with raw sensor logs, last execution output, peer review, theory lineage, and non-revealing metadata.
+- **Theory API:** submitted code must define `class Theory` with `fit(history)`, `predict(window)`, and `log_prob(observations)`. Optional methods are `detect_drift(history)` and `describe()`.
+- **Reward:** environment-owned Gaussian future-window log likelihood minus AST-based MDL complexity, plus rare-anomaly and hidden-drift adaptation bonuses. Paradigm-shift credit is scaled by structural distance from the parent theory.
+- **Sandbox:** theory code runs in subprocess mode for local smoke tests or Docker container mode for full runs, with timeout, memory/container settings, and import checks. Allowed imports are stdlib plus NumPy/SciPy names configured in JSON.
+- **Feedback loop:** peer review includes per-sensor prediction error, first divergence timing, structured falsified-hypothesis records, and recent theory lineage.
+- **Training stages:** oracle curriculum generation, supervised fine-tuning entrypoint, and group reward optimization entrypoint with periodic intermediate checkpoints.
+- **Evaluation outputs:** JSON reports with discovery score, log likelihood, execution failure rate, and baseline comparisons.
 
-try:
-    # Create environment from Docker image
-    ontology_architectenv = OntologyArchitectEnv.from_docker_image("ontology_architect-env:latest")
+## How To Run
 
-    # Reset
-    result = ontology_architectenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
-
-    for msg in messages:
-        result = ontology_architectenv.step(OntologyArchitectAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
-
-finally:
-    # Always clean up
-    ontology_architectenv.close()
-```
-
-That's it! The `OntologyArchitectEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
-
-## Building the Docker Image
-
-Before using the environment, you need to build the Docker image:
+Install dependencies:
 
 ```bash
-# From project root
+uv sync
+```
+
+Install dev/test dependencies:
+
+```bash
+uv sync --extra dev
+```
+
+Install optional Hugging Face training dependencies:
+
+```bash
+uv sync --extra train
+```
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Start the OpenEnv server:
+
+```bash
+uv run uvicorn server.app:app --reload
+```
+
+Run a local environment smoke test:
+
+```bash
+uv run python -m ontology_architect.scripts.smoke --config configs/tiny_smoke.json --baseline linear
+```
+
+Generate oracle curriculum data:
+
+```bash
+uv run python -m ontology_architect.scripts.generate_curriculum \
+  --config configs/tiny_smoke.json \
+  --output artifacts/curriculum/oracle.jsonl \
+  --episodes 3
+```
+
+Launch SFT training with a Hugging Face model:
+
+```bash
+uv run python -m ontology_architect.scripts.train_sft \
+  --config configs/full_research.json \
+  --model-id <HF_MODEL_ID> \
+  --data artifacts/curriculum/oracle.jsonl \
+  --output-dir artifacts/checkpoints/sft
+```
+
+Dry-run SFT without downloading a model:
+
+```bash
+uv run python -m ontology_architect.scripts.train_sft \
+  --config configs/tiny_smoke.json \
+  --model-id dry-run-model \
+  --data artifacts/curriculum/oracle.jsonl \
+  --output-dir artifacts/checkpoints/sft-smoke \
+  --dry-run
+```
+
+Launch group reward optimization:
+
+```bash
+uv run python -m ontology_architect.scripts.train_gro \
+  --config configs/full_research.json \
+  --model-id <HF_MODEL_ID> \
+  --output-dir artifacts/checkpoints/gro \
+  --group-size 4 \
+  --max-steps 100 \
+  --checkpoint-steps 10
+```
+
+Dry-run group reward optimization:
+
+```bash
+uv run python -m ontology_architect.scripts.train_gro \
+  --config configs/tiny_smoke.json \
+  --model-id dry-run-model \
+  --output-dir artifacts/checkpoints/gro-smoke \
+  --dry-run
+```
+
+Run benchmark evaluation and report generation:
+
+```bash
+uv run python -m ontology_architect.scripts.evaluate \
+  --config configs/tiny_smoke.json \
+  --output artifacts/reports/baseline_report.json
+```
+
+Build and run the Docker image:
+
+```bash
 docker build -t ontology_architect-env:latest -f server/Dockerfile .
+docker run --rm -p 8000:8000 ontology_architect-env:latest
 ```
 
-## Deploying to Hugging Face Spaces
+The same `ontology_architect-env:latest` image is used by container sandbox mode. The sandbox mounts the local package into the container read-only and executes `sandbox_runner.py` with network disabled.
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+## Configuration
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+Two example configs are included:
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+- `configs/tiny_smoke.json`: small local runs, subprocess sandbox, short horizons.
+- `configs/full_research.json`: larger benchmark defaults, container sandbox, longer training loops.
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+Set the exact Hugging Face model at runtime with `--model-id`. The project does not hardcode a checkpoint.
 
-### Prerequisites
-
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
-
-### Options
-
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
-
-### Examples
-
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
-
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
-
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
-
-# Push as a private space
-openenv push --private
-
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
-
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
-
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-
-## Environment Details
-
-### Action
-**OntologyArchitectAction**: Contains a single field
-- `message` (str) - The message to echo back
-
-### Observation
-**OntologyArchitectObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
-
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
-
-## Advanced Usage
-
-### Connecting to an Existing Server
-
-If you already have a Ontology Architect environment server running, you can connect directly:
+## Theory Module Example
 
 ```python
-from ontology_architect import OntologyArchitectEnv
+import math
 
-# Connect to existing server
-ontology_architectenv = OntologyArchitectEnv(base_url="<ENV_HTTP_URL_HERE>")
 
-# Use as normal
-result = ontology_architectenv.reset()
-result = ontology_architectenv.step(OntologyArchitectAction(message="Hello!"))
+class Theory:
+    def fit(self, history):
+        self.last = dict(history[-1]["sensors"]) if history else {}
+        return {"records": len(history)}
+
+    def predict(self, window):
+        return [{"sensors": dict(self.last), "anomaly_prob": 0.05} for _ in range(window["steps"])]
+
+    def log_prob(self, observations):
+        return -float(len(observations))
+
+    def describe(self):
+        return "Static persistence theory."
 ```
 
-Note: When connecting to an existing server, `ontology_architectenv.close()` will NOT stop the server.
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/ontology_architect_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
-```
-
-## Project Structure
-
-```
-ontology_architect/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # OntologyArchitectEnv client implementation
-├── models.py              # Action and Observation models
-└── server/
-    ├── __init__.py        # Server module exports
-    ├── ontology_architect_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application
-    └── Dockerfile         # Container image definition
-```
+The environment computes the real reward from predictions and hidden future observations; `log_prob` is recorded as theory output but is not trusted as the reward.

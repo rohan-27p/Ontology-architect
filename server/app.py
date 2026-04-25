@@ -4,11 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-FastAPI application for the Ontology Architect Environment.
+"""FastAPI application for the Ontology Architect Environment.
 
-This module creates an HTTP server that exposes the OntologyArchitectEnvironment
-over HTTP endpoints, making it compatible with HTTPEnvClient.
+This module exposes the research environment over HTTP, making it compatible
+with HTTPEnvClient.
 
 Usage:
     # Development (with auto-reload):
@@ -22,19 +21,24 @@ Usage:
 """
 
 try:
-    from openenv_core.env_server.http_server import create_app
-except Exception as e:  # pragma: no cover
-    raise ImportError("openenv_core is required for the web interface. Install dependencies with '\n    uv sync\n'") from e
+    from openenv.core.env_server.http_server import create_app
+except Exception as first_error:
+    try:
+        from openenv_core.env_server.http_server import create_app
+    except Exception as e:  # pragma: no cover
+        raise ImportError("OpenEnv is required for the web interface. Install dependencies with '\n    uv sync\n'") from first_error
 
 from .ontology_architect_environment import OntologyArchitectEnvironment
-from models import OntologyArchitectAction, OntologyArchitectObservation
 
-# Create the environment instance
-env = OntologyArchitectEnvironment()
+try:
+    from ontology_architect.models import OntologyArchitectAction, OntologyArchitectObservation
+except ImportError:  # pragma: no cover
+    from models import OntologyArchitectAction, OntologyArchitectObservation
 
-# Create the app with web interface and README integration
+# Create the app with web interface and README integration.
+# Current OpenEnv expects an environment factory so every session gets fresh state.
 app = create_app(
-    env,
+    OntologyArchitectEnvironment,
     OntologyArchitectAction,
     OntologyArchitectObservation,
     env_name="ontology_architect",

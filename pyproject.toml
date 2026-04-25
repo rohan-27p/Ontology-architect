@@ -21,14 +21,8 @@ dependencies = [
     "pydantic>=2.0.0",
     "uvicorn>=0.24.0",
     "requests>=2.31.0",
-    # Environment-specific dependencies
-    # Add all dependencies needed for your environment here
-    # Examples:
-    # "numpy>=1.19.0",
-    # "torch>=2.0.0",
-    # "gymnasium>=0.29.0",
-    # "openspiel>=1.0.0",
-    # "smolagents>=1.22.0,<2",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
 ]
 
 [project.optional-dependencies]
@@ -36,13 +30,28 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
 ]
+train = [
+    "accelerate>=0.29.0",
+    "datasets>=2.18.0",
+    "torch>=2.2.0",
+    "transformers>=4.40.0",
+    "trl>=0.8.0",
+]
 
 [project.scripts]
 # Server entry point - enables running via: uv run --project . server
 # or: python -m ontology_architect.server.app
 server = "ontology_architect.server.app:main"
+ontology-smoke = "ontology_architect.scripts.smoke:main"
+ontology-generate-curriculum = "ontology_architect.scripts.generate_curriculum:main"
+ontology-train-sft = "ontology_architect.scripts.train_sft:main"
+ontology-train-gro = "ontology_architect.scripts.train_gro:main"
+ontology-evaluate = "ontology_architect.scripts.evaluate:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = ["ontology_architect", "ontology_architect.server"]
-package-dir = { "ontology_architect" = ".", "ontology_architect.server" = "server" }
+packages = ["ontology_architect", "ontology_architect.server", "ontology_architect.scripts"]
+package-dir = { "ontology_architect" = ".", "ontology_architect.server" = "server", "ontology_architect.scripts" = "scripts" }
+
+[tool.pytest.ini_options]
+norecursedirs = ["artifacts"]
