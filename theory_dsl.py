@@ -72,6 +72,7 @@ def normalize_theory_spec(spec: dict[str, Any]) -> dict[str, Any]:
         raise TheoryDSLValidationError(f"DSL observations exceed {MAX_SENSOR_OUTPUTS} outputs")
 
     state_set = set(state)
+    state_set.add("t")
     for name, expr in dynamics.items():
         if str(name) not in state_set:
             raise TheoryDSLValidationError(f"Dynamic variable '{name}' is not in state")
@@ -284,7 +285,9 @@ class Theory:
         recent = history[-lookback:] if history else []
         self.trend = self._fit_trend(recent)
         self.residual_scale = self._fit_residual_scale(recent)
+        self.last_t = float(history[-1].get("t", 0.0)) if history else 0.0
         self.state = self._initial_state()
+        self.state["t"] = self.last_t
         return {
             "dsl_version": self.spec["dsl_version"],
             "state": list(self.spec["state"]),
@@ -387,6 +390,7 @@ class Theory:
         for _ in range(max(substeps, 1)):
             deriv = self._derivative(state)
             state = {name: self._clip(value + step_dt * deriv.get(name, 0.0)) for name, value in state.items()}
+            state["t"] = state.get("t", 0.0) + step_dt
         return state
 
     def _derivative(self, state):
