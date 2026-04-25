@@ -1,0 +1,56 @@
+{
+  "universe": {
+    "seed": 104729,
+    "family": "auto",
+    "split": "train",
+    "observation_window": 24,
+    "future_window": 8,
+    "max_steps": 12,
+    "dt": 0.12,
+    "sensor_noise": 0.04,
+    "process_noise": 0.01,
+    "anomaly_rate": 0.06,
+    "anomaly_scale": 1.6,
+    "drift_interval": 4
+  },
+  "sandbox": {
+    "mode": "container",
+    "container_image": "ontology_architect-env:latest",
+    "timeout_seconds": 5.0,
+    "memory_mb": 512,
+    "cpus": 1.0,
+    "allowed_imports": [
+      "abc",
+      "collections",
+      "dataclasses",
+      "enum",
+      "functools",
+      "itertools",
+      "json",
+      "math",
+      "numpy",
+      "random",
+      "scipy",
+      "statistics",
+      "typing"
+    ]
+  },
+  "reward": {
+    "mdl_lambda": 0.0005,
+    "prediction_sigma": 0.12,
+    "anomaly_bonus": 2.0,
+    "drift_bonus": 1.0,
+    "false_paradigm_shift_penalty": 0.25,
+    "execution_error_penalty": -25.0,
+    "max_theory_chars": 12000
+  },
+  "training": {
+    "model_id": "",
+    "output_dir": "artifacts/checkpoints",
+    "curriculum_path": "artifacts/curriculum/oracle.jsonl",
+    "report_dir": "artifacts/reports",
+    "group_size": 4,
+    "max_steps": 100,
+    "batch_size": 1
+  }
+}
