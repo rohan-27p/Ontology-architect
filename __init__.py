@@ -4,10 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Ontology Architect Environment - A simple test environment for HTTP server."""
+"""Ontology Architect environment for code-driven scientific discovery."""
 
-from .client import OntologyArchitectEnv
-from .models import OntologyArchitectAction, OntologyArchitectObservation
+try:
+    from .client import OntologyArchitectEnv
+    from .models import OntologyArchitectAction, OntologyArchitectObservation
+except ImportError:  # pragma: no cover - source-root import during pytest collection.
+    from client import OntologyArchitectEnv
+    from models import OntologyArchitectAction, OntologyArchitectObservation
 
 __all__ = ["OntologyArchitectAction", "OntologyArchitectObservation", "OntologyArchitectEnv"]
 
