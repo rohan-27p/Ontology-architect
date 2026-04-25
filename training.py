@@ -44,6 +44,7 @@ def write_gro_manifest(
     group_size: int,
     max_steps: int,
     dry_run: bool,
+    checkpoint_steps: int | None = None,
 ) -> dict:
     manifest = {
         "stage": "group_reward_optimization",
@@ -52,6 +53,7 @@ def write_gro_manifest(
         "group_size": group_size,
         "max_steps": max_steps,
         "dry_run": dry_run,
+        "checkpoint_steps": checkpoint_steps,
         "algorithm": "sample multiple theory rewrites, score each group, optimize relative discovery rewards",
     }
     output = Path(output_dir)
@@ -113,6 +115,7 @@ def run_group_reward_optimization(
     max_steps: int,
     max_new_tokens: int = 768,
     learning_rate: float = 1e-6,
+    checkpoint_steps: int | None = None,
 ) -> dict:
     try:
         import torch
@@ -132,8 +135,11 @@ def run_group_reward_optimization(
     model.to(device)
     model.train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    checkpoint_steps = checkpoint_steps if checkpoint_steps is not None else getattr(config.training, "checkpoint_steps", 0)
+    checkpoint_steps = max(0, int(checkpoint_steps))
 
     reward_history = []
+    last_checkpoint = ""
     with reward_log_path.open("w", encoding="utf-8") as reward_log:
         for step in range(max_steps):
             prompt_env = OntologyArchitectEnvironment(config)
@@ -187,6 +193,20 @@ def run_group_reward_optimization(
             reward_log.write(json.dumps(row, sort_keys=True) + "\n")
             reward_log.flush()
             reward_history.append(row)
+            if checkpoint_steps and (step + 1) % checkpoint_steps == 0:
+                checkpoint_dir = output / f"checkpoint-{step + 1}"
+                checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                model.save_pretrained(str(checkpoint_dir))
+                tokenizer.save_pretrained(str(checkpoint_dir))
+                torch.save(
+                    {
+                        "step": step + 1,
+                        "optimizer": optimizer.state_dict(),
+                        "last_row": row,
+                    },
+                    checkpoint_dir / "trainer_state.pt",
+                )
+                last_checkpoint = str(checkpoint_dir)
 
     model.save_pretrained(str(output))
     tokenizer.save_pretrained(str(output))
@@ -197,6 +217,7 @@ def run_group_reward_optimization(
         "reward_log_path": str(reward_log_path),
         "steps": max_steps,
         "last_mean_reward": reward_history[-1]["mean_reward"] if reward_history else 0.0,
+        "last_checkpoint": last_checkpoint,
     }
 
 

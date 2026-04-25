@@ -51,12 +51,21 @@ class SandboxConfig:
 @dataclass(frozen=True)
 class RewardConfig:
     mdl_lambda: float = 0.0005
+    mdl_complexity_mode: str = "ast"
     prediction_sigma: float = 0.12
     anomaly_bonus: float = 2.0
     drift_bonus: float = 1.0
     false_paradigm_shift_penalty: float = 0.25
+    paradigm_shift_min_structural_delta: float = 0.15
     execution_error_penalty: float = -25.0
     max_theory_chars: int = 12000
+
+
+@dataclass(frozen=True)
+class FeedbackConfig:
+    peer_review_window: int = 8
+    lineage_window: int = 8
+    divergence_sigma: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -68,6 +77,7 @@ class TrainingConfig:
     group_size: int = 4
     max_steps: int = 100
     batch_size: int = 1
+    checkpoint_steps: int = 10
 
 
 @dataclass(frozen=True)
@@ -75,6 +85,7 @@ class ExperimentConfig:
     universe: UniverseConfig = UniverseConfig()
     sandbox: SandboxConfig = SandboxConfig()
     reward: RewardConfig = RewardConfig()
+    feedback: FeedbackConfig = FeedbackConfig()
     training: TrainingConfig = TrainingConfig()
 
 
@@ -93,6 +104,7 @@ def config_from_dict(data: dict[str, Any] | None) -> ExperimentConfig:
         universe=_coerce_section(data.get("universe"), UniverseConfig),
         sandbox=_coerce_section(data.get("sandbox"), SandboxConfig),
         reward=_coerce_section(data.get("reward"), RewardConfig),
+        feedback=_coerce_section(data.get("feedback"), FeedbackConfig),
         training=_coerce_section(data.get("training"), TrainingConfig),
     )
 

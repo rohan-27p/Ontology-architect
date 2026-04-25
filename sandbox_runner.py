@@ -6,6 +6,7 @@ import ast
 import builtins
 import contextlib
 import importlib
+import importlib.util
 import io
 import json
 import math
@@ -108,25 +109,86 @@ def _preload_modules(allowed_imports: tuple[str, ...]) -> None:
 
 def _validate_ast(code: str, allowed_imports: tuple[str, ...]) -> None:
     tree = ast.parse(code)
+    module_aliases: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 _require_allowed_import(alias.name, allowed_imports)
+                module_aliases[alias.asname or alias.name.split(".", 1)[0]] = alias.name
         elif isinstance(node, ast.ImportFrom):
             if node.module is None:
                 raise ImportError("Relative imports are not allowed")
             _require_allowed_import(node.module, allowed_imports)
+            _require_allowed_fromlist(node.module, [alias.name for alias in node.names], allowed_imports)
+            for alias in node.names:
+                imported_name = f"{node.module}.{alias.name}"
+                if imported_name in allowed_imports:
+                    module_aliases[alias.asname or alias.name] = imported_name
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id in BANNED_CALLS:
                 raise PermissionError(f"Call to {node.func.id} is not allowed")
+            if node.func.id == "getattr":
+                _require_allowed_getattr(node, module_aliases, allowed_imports)
         elif isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             raise PermissionError("Dunder attribute access is not allowed")
+        elif isinstance(node, ast.Attribute):
+            _require_allowed_attribute(node, module_aliases, allowed_imports)
 
 
 def _require_allowed_import(module_name: str, allowed_imports: tuple[str, ...]) -> None:
-    top_name = module_name.split(".", 1)[0]
-    if top_name not in allowed_imports:
+    if module_name not in allowed_imports:
         raise ImportError(f"Import '{module_name}' is not allowed")
+
+
+def _require_allowed_fromlist(module_name: str, fromlist: list[str] | tuple[str, ...], allowed_imports: tuple[str, ...]) -> None:
+    for item in fromlist:
+        if item == "*":
+            raise ImportError("Wildcard imports are not allowed")
+        submodule_name = f"{module_name}.{item}"
+        if _looks_like_submodule(submodule_name) and submodule_name not in allowed_imports:
+            raise ImportError(f"Import '{submodule_name}' is not allowed")
+
+
+def _looks_like_submodule(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, AttributeError, ModuleNotFoundError, ValueError):
+        return False
+
+
+def _require_allowed_attribute(
+    node: ast.Attribute,
+    module_aliases: dict[str, str],
+    allowed_imports: tuple[str, ...],
+) -> None:
+    if not isinstance(node.value, ast.Name):
+        return
+    module_name = module_aliases.get(node.value.id)
+    if not module_name:
+        return
+    submodule_name = f"{module_name}.{node.attr}"
+    if _looks_like_submodule(submodule_name) and submodule_name not in allowed_imports:
+        raise ImportError(f"Import '{submodule_name}' is not allowed")
+
+
+def _require_allowed_getattr(
+    node: ast.Call,
+    module_aliases: dict[str, str],
+    allowed_imports: tuple[str, ...],
+) -> None:
+    if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant) or not isinstance(node.args[1].value, str):
+        return
+    attr = node.args[1].value
+    if attr.startswith("__"):
+        raise PermissionError("Dunder attribute access is not allowed")
+    if not isinstance(node.args[0], ast.Name):
+        return
+    module_name = module_aliases.get(node.args[0].id)
+    if not module_name:
+        return
+    submodule_name = f"{module_name}.{attr}"
+    if _looks_like_submodule(submodule_name) and submodule_name not in allowed_imports:
+        raise ImportError(f"Import '{submodule_name}' is not allowed")
 
 
 def _safe_builtins(allowed_imports: tuple[str, ...]) -> dict[str, Any]:
@@ -183,6 +245,7 @@ def _limited_import(allowed_imports: tuple[str, ...]):
         if level != 0:
             raise ImportError("Relative imports are not allowed")
         _require_allowed_import(name, allowed_imports)
+        _require_allowed_fromlist(name, fromlist or (), allowed_imports)
         return builtins.__import__(name, globals, locals, fromlist, level)
 
     return import_hook

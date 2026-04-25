@@ -1,8 +1,8 @@
 from ontology_architect.baselines import get_baseline
 from ontology_architect.config import RewardConfig, SandboxConfig, UniverseConfig
-from ontology_architect.reward import score_theory
-from ontology_architect.sandbox import TheorySandbox
-from ontology_architect.universe import ProceduralAlienUniverse
+from ontology_architect.reward import score_theory, theory_complexity
+from ontology_architect.sandbox import SandboxResult, TheorySandbox
+from ontology_architect.universe import ProceduralAlienUniverse, SensorRecord
 
 
 def _windows():
@@ -38,6 +38,45 @@ def test_sandbox_rejects_disallowed_import():
     assert "not allowed" in result.error
 
 
+def test_sandbox_rejects_unlisted_numpy_submodule_import():
+    history, future = _windows()
+    result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
+        "from numpy import linalg\n\nclass Theory:\n    pass\n",
+        history,
+        future,
+        ("sigma", "tau", "lambda"),
+    )
+
+    assert not result.ok
+    assert "numpy.linalg" in result.error
+
+
+def test_sandbox_rejects_unlisted_numpy_submodule_attribute_access():
+    history, future = _windows()
+    result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
+        "import numpy as np\nvalue = np.linalg.norm([1.0])\n\nclass Theory:\n    pass\n",
+        history,
+        future,
+        ("sigma", "tau", "lambda"),
+    )
+
+    assert not result.ok
+    assert "numpy.linalg" in result.error
+
+
+def test_sandbox_rejects_unlisted_numpy_submodule_getattr_access():
+    history, future = _windows()
+    result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
+        "import numpy as np\nvalue = getattr(np, 'linalg').norm([1.0])\n\nclass Theory:\n    pass\n",
+        history,
+        future,
+        ("sigma", "tau", "lambda"),
+    )
+
+    assert not result.ok
+    assert "numpy.linalg" in result.error
+
+
 def test_reward_penalizes_execution_errors():
     history, future = _windows()
     result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
@@ -50,3 +89,37 @@ def test_reward_penalizes_execution_errors():
 
     assert reward.reward == RewardConfig().execution_error_penalty
     assert not reward.execution_ok
+
+
+def test_ast_mdl_ignores_comments_and_whitespace():
+    compact = "class Theory:\n    pass\n"
+    padded = "# explanatory comment\n\nclass Theory:\n\n    pass\n"
+
+    assert theory_complexity(compact).score == theory_complexity(padded).score
+
+
+def test_drift_bonus_requires_structural_change_for_repeated_theory():
+    future = [SensorRecord(t=0.0, sensors={"sigma": 1.0}, drift=True)]
+    result = SandboxResult(
+        ok=True,
+        error="",
+        stdout="",
+        predictions=[{"sensors": {"sigma": 1.0}}],
+        reported_log_prob=0.0,
+        description="",
+        drift_detected=False,
+        runtime_ms=0.0,
+    )
+    module = "class Theory:\n    pass\n"
+
+    reward = score_theory(
+        result,
+        future,
+        module,
+        RewardConfig(),
+        paradigm_shift_claim=True,
+        previous_theory_module=module,
+    )
+
+    assert reward.drift_bonus == 0.0
+    assert reward.weak_paradigm_shift

@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--max-new-tokens", type=int, default=768)
     parser.add_argument("--learning-rate", type=float, default=1e-6)
+    parser.add_argument("--checkpoint-steps", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -32,12 +33,20 @@ def main() -> None:
     output_dir = args.output_dir or f"{config.training.output_dir}/gro"
     group_size = args.group_size or config.training.group_size
     max_steps = args.max_steps or config.training.max_steps
+    checkpoint_steps = args.checkpoint_steps if args.checkpoint_steps is not None else config.training.checkpoint_steps
 
     if args.dry_run:
-        manifest = write_gro_manifest(args.model_id, output_dir, group_size, max_steps, dry_run=True)
+        manifest = write_gro_manifest(
+            args.model_id,
+            output_dir,
+            group_size,
+            max_steps,
+            dry_run=True,
+            checkpoint_steps=checkpoint_steps,
+        )
         print(
             f"validated GRO config: group_size={manifest['group_size']} "
-            f"max_steps={manifest['max_steps']}"
+            f"max_steps={manifest['max_steps']} checkpoint_steps={manifest['checkpoint_steps']}"
         )
         return
 
@@ -49,8 +58,16 @@ def main() -> None:
         max_steps,
         max_new_tokens=args.max_new_tokens,
         learning_rate=args.learning_rate,
+        checkpoint_steps=checkpoint_steps,
     )
-    write_gro_manifest(args.model_id, output_dir, group_size, max_steps, dry_run=False)
+    write_gro_manifest(
+        args.model_id,
+        output_dir,
+        group_size,
+        max_steps,
+        dry_run=False,
+        checkpoint_steps=checkpoint_steps,
+    )
     print(f"saved GRO checkpoint to {result['output_dir']}")
 
 
