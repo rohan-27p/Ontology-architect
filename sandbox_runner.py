@@ -31,7 +31,13 @@ def run_payload(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
     stdout = io.StringIO()
     try:
-        code = payload["theory_module"]
+        raw = payload["theory_module"]
+        # Transparently render DSL JSON into a Theory class before execution
+        try:
+            from theory_dsl import render_theory_module
+            code = render_theory_module(raw)
+        except Exception:
+            code = raw
         allowed_imports = tuple(payload.get("allowed_imports", ()))
         _preload_modules(allowed_imports)
         _validate_ast(code, allowed_imports)

@@ -44,7 +44,9 @@
     "false_paradigm_shift_penalty": 0.25,
     "paradigm_shift_min_structural_delta": 0.15,
     "execution_error_penalty": -25.0,
-    "max_theory_chars": 12000
+    "max_theory_chars": 12000,
+    "stability_weight": 0.3,
+    "stability_threshold": 0.2
   },
   "feedback": {
     "peer_review_window": 8,

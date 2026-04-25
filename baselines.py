@@ -128,11 +128,46 @@ class Theory:
 '''
 
 
+# DSL oracle for dual_fluid universe — encodes the correct latent ontology.
+# This is the "gold standard" DSL spec. A trained model that converges to
+# something structurally similar has successfully performed scientific discovery.
+import json as _json
+
+DUAL_FLUID_DSL_ORACLE = _json.dumps({
+    "dsl_version": 1,
+    "name": "dual fluid oracle: autocatalytic A + forced oscillator B",
+    "state": ["A", "B", "C"],
+    "init": {
+        "A": {"sensor": "pressure", "scale": 1.0},
+        "B": 0.3,
+        "C": 0.0,
+    },
+    "dynamics": {
+        "A": {"linear": {"terms": {"A": -0.3, "B": 0.25}, "bias": 0.0}},
+        "B": {"add": [{"sin": "A"}, {"linear": {"terms": {"A": -0.08}}}]},
+        "C": {"linear": {"terms": {"A": 0.06, "C": -0.12}}},
+    },
+    "observations": {
+        "pressure": {"var": "A"},
+        "turbulence": {"pow": [{"add": [{"var": "A"}, {"neg": {"var": "B"}}]}, 2]},
+        "thermal_radiation": {"add": [
+            {"mul": [{"var": "B"}, {"exp": {"neg": {"abs": {"var": "A"}}}}]},
+            {"mul": [0.3, {"var": "C"}]},
+        ]},
+        "magnetic_flux": {"mul": [0.1, {"var": "A"}, {"var": "B"}]},
+    },
+    "fit": {"lookback": 8, "trend_weight": 0.1, "drift_threshold": 0.4, "anomaly_threshold": 0.4},
+    "integrator": {"dt": 0.15, "substeps": 2},
+    "noise": 0.08,
+}, sort_keys=True)
+
+
 BASELINES = {
     "static": STATIC_THEORY,
     "linear": LINEAR_TREND_THEORY,
     "oracle": ANOMALY_AWARE_TEACHER,
     "teacher": ANOMALY_AWARE_TEACHER,
+    "dual_fluid_dsl": DUAL_FLUID_DSL_ORACLE,
 }
 
 

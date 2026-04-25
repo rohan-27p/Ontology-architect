@@ -1,6 +1,6 @@
 ---
 title: Ontology Architect Environment Server
-emoji: 🎪
+emoji: 🔬
 colorFrom: purple
 colorTo: green
 sdk: docker
@@ -11,145 +11,191 @@ tags:
   - openenv
 ---
 
-# Ontology Architect
+# 🔬 Ontology Architect
 
-Ontology Architect is an OpenEnv-compatible research environment for code-driven scientific discovery. The agent receives noisy text logs from a simulated alien universe, submits a full Python theory module, and is rewarded for compact theories that predict hidden future observations.
+> **Train an LLM to discover hidden physical laws from raw sensor data.**
 
-## What Was Implemented
+Ontology Architect is an OpenEnv-compatible RL environment that challenges LLM agents to perform *unsupervised scientific discovery*. An agent observes noisy sensor logs from a simulated alien universe governed by hidden ODEs and must iteratively write compact theories that predict future observations.
 
-The echo scaffold has been replaced with a research loop:
+**→ [Colab Training Notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb)**  
+**→ [GitHub Repository](https://github.com/rohan-27p/ontology_architect)**  
+**→ [HuggingFace Space](https://huggingface.co/spaces/lostdecimal27/ontology-architect)**
 
-- **Environment purpose:** discover compact ontologies for hidden latent ODE/SDE systems from raw sensor logs.
-- **Action contract:** `OntologyArchitectAction(theory_module=..., revision_note=..., paradigm_shift_claim=...)`.
-- **Observation contract:** one schema-guided text envelope with raw sensor logs, last execution output, peer review, theory lineage, and non-revealing metadata.
-- **Theory API:** submitted code must define `class Theory` with `fit(history)`, `predict(window)`, and `log_prob(observations)`. Optional methods are `detect_drift(history)` and `describe()`.
-- **Reward:** environment-owned Gaussian future-window log likelihood minus AST-based MDL complexity, plus rare-anomaly and hidden-drift adaptation bonuses. Paradigm-shift credit is scaled by structural distance from the parent theory.
-- **Sandbox:** theory code runs in subprocess mode for local smoke tests or Docker container mode for full runs, with timeout, memory/container settings, and import checks. Allowed imports are stdlib plus NumPy/SciPy names configured in JSON.
-- **Feedback loop:** peer review includes per-sensor prediction error, first divergence timing, structured falsified-hypothesis records, and recent theory lineage.
-- **Training stages:** oracle curriculum generation, supervised fine-tuning entrypoint, and group reward optimization entrypoint with periodic intermediate checkpoints.
-- **Evaluation outputs:** JSON reports with discovery score, log likelihood, execution failure rate, and baseline comparisons.
+---
+
+## The Challenge: Kuhnian Scientific Discovery
+
+The environment implements a 3-phase discovery challenge inspired by Thomas Kuhn's *Structure of Scientific Revolutions*:
+
+```mermaid
+graph LR
+    A["Phase 1: Normal Science"] -->|"drift event"| B["Phase 2: Crisis"]
+    B -->|"new latent variable"| C["Phase 3: Paradigm Shift"]
+    C -->|"new equilibrium"| A
+```
+
+1. **Normal Science:** The agent sees 4 sensor channels (`pressure`, `turbulence`, `thermal_radiation`, `magnetic_flux`) and must discover that two hidden latent variables (A, B) drive all observations through coupled ODEs.
+2. **Crisis:** The forcing frequency shifts — predictions break. The agent must detect the anomaly and adapt.
+3. **Paradigm Shift:** A *third* latent variable (C) activates. The old 2-variable theory is fundamentally incomplete. The agent must discover this new ontological structure.
+
+## How It Works
+
+The agent submits a **structured Theory DSL** — a JSON spec defining latent state variables, dynamics equations, and observation projections. The environment:
+
+1. Executes the theory in a secure sandbox
+2. Compares predictions against hidden future observations
+3. Scores using a composite reward: `log_likelihood - MDL_penalty + anomaly_bonus + drift_bonus + stability_bonus`
+4. Returns peer review feedback showing where predictions diverged
+
+### Theory DSL Example
+
+```json
+{
+  "dsl_version": 1,
+  "name": "dual fluid sketch",
+  "state": ["A", "B"],
+  "dynamics": {
+    "A": {"linear": {"terms": {"A": -0.3, "B": 0.25}}},
+    "B": {"add": [{"sin": "A"}, {"linear": {"terms": {"A": -0.08}}}]}
+  },
+  "observations": {
+    "pressure": {"var": "A"},
+    "turbulence": {"pow": [{"add": [{"var": "A"}, {"neg": {"var": "B"}}]}, 2]},
+    "thermal_radiation": {"mul": [{"var": "B"}, {"exp": {"neg": {"abs": {"var": "A"}}}}]},
+    "magnetic_flux": {"mul": [0.1, {"var": "A"}, {"var": "B"}]}
+  },
+  "integrator": {"dt": 0.15, "substeps": 2},
+  "noise": 0.1
+}
+```
+
+The DSL supports: `var`, `const`, `linear`, `add`, `mul`, `sin`, `cos`, `tanh`, `exp`, `abs`, `pow`, `sqrt`, `neg`.
+
+## Reward Structure
+
+| Component | Type | Signal |
+|---|---|---|
+| `r_prediction` | Dense | Gaussian log-likelihood on hidden future window |
+| `r_complexity` | Dense | AST/DSL Minimum Description Length penalty |
+| `r_anomaly` | Sparse | Bonus for detecting rare anomaly events |
+| `r_drift` | Sparse | Bonus for adapting when hidden laws shift |
+| `r_stability` | Dense | Rewards incremental refinement, penalizes wild oscillation |
+
+## Results: Latent Variable Discovery
+
+The following plot shows the environment running with the DSL oracle baseline (purple) vs a static persistence baseline (gray). The top rows show the *true hidden latent variables* (A, B, C) — which the agent never sees. The bottom rows show sensor predictions.
+
+![Discovery Plot](artifacts/discovery_plot.png)
+
+Key observations:
+- **Latent A** exhibits autocatalytic damping — the oracle captures its trajectory
+- **Latent B** is a forced oscillator driven by `sin(ω·t)` — after fixing the ODE bug, this now genuinely oscillates
+- **Latent C** activates after the second drift event — the agent must discover this new dimension
+- Red dashed lines mark drift events (hidden from the agent)
 
 ## How To Run
 
-Install dependencies:
+### Install Dependencies
 
 ```bash
-uv sync
+uv sync                    # core deps
+uv sync --extra dev        # + pytest
+uv sync --extra train      # + transformers, torch, trl
 ```
 
-Install dev/test dependencies:
+### Run Tests
 
 ```bash
-uv sync --extra dev
+uv run pytest              # 27 tests — universe, sandbox, reward, DSL, dual_fluid
 ```
 
-Install optional Hugging Face training dependencies:
-
-```bash
-uv sync --extra train
-```
-
-Run tests:
-
-```bash
-uv run pytest
-```
-
-Start the OpenEnv server:
+### Start the OpenEnv Server
 
 ```bash
 uv run uvicorn server.app:app --reload
 ```
 
-Run a local environment smoke test:
+### Smoke Test (Dual-Fluid Universe)
 
 ```bash
-uv run python -m ontology_architect.scripts.smoke --config configs/tiny_smoke.json --baseline linear
+uv run python -m ontology_architect.scripts.smoke \
+  --config configs/dual_fluid_demo.json \
+  --baseline dual_fluid_dsl \
+  --steps 5
 ```
 
-Generate oracle curriculum data:
+### Generate Discovery Visualization
 
 ```bash
+uv run python -m ontology_architect.scripts.visualize_discovery \
+  --config configs/dual_fluid_demo.json \
+  --baseline dual_fluid_dsl \
+  --compare-baseline static \
+  --output artifacts/discovery_plot.png
+```
+
+### Training (Colab / GPU)
+
+See the [Colab notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb) for the full GRPO training pipeline:
+
+```bash
+# Oracle curriculum generation
 uv run python -m ontology_architect.scripts.generate_curriculum \
-  --config configs/tiny_smoke.json \
+  --config configs/dual_fluid_demo.json \
   --output artifacts/curriculum/oracle.jsonl \
-  --episodes 3
-```
+  --episodes 60
 
-Launch SFT training with a Hugging Face model:
-
-```bash
+# SFT warm-start
 uv run python -m ontology_architect.scripts.train_sft \
-  --config configs/full_research.json \
+  --config configs/dual_fluid_demo.json \
   --model-id <HF_MODEL_ID> \
-  --data artifacts/curriculum/oracle.jsonl \
-  --output-dir artifacts/checkpoints/sft
-```
+  --data artifacts/curriculum/oracle.jsonl
 
-Dry-run SFT without downloading a model:
-
-```bash
-uv run python -m ontology_architect.scripts.train_sft \
-  --config configs/tiny_smoke.json \
-  --model-id dry-run-model \
-  --data artifacts/curriculum/oracle.jsonl \
-  --output-dir artifacts/checkpoints/sft-smoke \
-  --dry-run
-```
-
-Launch group reward optimization:
-
-```bash
+# Group Reward Optimization
 uv run python -m ontology_architect.scripts.train_gro \
-  --config configs/full_research.json \
+  --config configs/dual_fluid_demo.json \
   --model-id <HF_MODEL_ID> \
-  --output-dir artifacts/checkpoints/gro \
-  --group-size 4 \
-  --max-steps 100 \
-  --checkpoint-steps 10
+  --group-size 2 \
+  --max-steps 100
 ```
 
-Dry-run group reward optimization:
-
-```bash
-uv run python -m ontology_architect.scripts.train_gro \
-  --config configs/tiny_smoke.json \
-  --model-id dry-run-model \
-  --output-dir artifacts/checkpoints/gro-smoke \
-  --dry-run
-```
-
-Run benchmark evaluation and report generation:
-
-```bash
-uv run python -m ontology_architect.scripts.evaluate \
-  --config configs/tiny_smoke.json \
-  --output artifacts/reports/baseline_report.json
-```
-
-Build and run the Docker image:
+### Docker
 
 ```bash
 docker build -t ontology_architect-env:latest -f server/Dockerfile .
 docker run --rm -p 8000:8000 ontology_architect-env:latest
 ```
 
-The same `ontology_architect-env:latest` image is used by container sandbox mode. The sandbox mounts the local package into the container read-only and executes `sandbox_runner.py` with network disabled.
-
 ## Configuration
 
-Two example configs are included:
+| Config | Purpose |
+|---|---|
+| `configs/tiny_smoke.json` | Fast local testing (thermal_split, 3 steps) |
+| `configs/dual_fluid_demo.json` | **Demo showcase** (dual_fluid, 10 steps, paradigm shifts) |
+| `configs/full_research.json` | Extended research benchmarks |
 
-- `configs/tiny_smoke.json`: small local runs, subprocess sandbox, short horizons.
-- `configs/full_research.json`: larger benchmark defaults, container sandbox, longer training loops.
+## Architecture
 
-Set the exact Hugging Face model at runtime with `--model-id`. The project does not hardcode a checkpoint.
+```mermaid
+graph TD
+    Agent["LLM Agent"] -->|"Theory DSL JSON"| Env["OntologyArchitectEnvironment"]
+    Env -->|"validate + render"| DSL["TheoryDSL Parser"]
+    DSL -->|"Python Theory class"| Sandbox["TheorySandbox"]
+    Sandbox -->|"predictions"| Reward["RewardScorer"]
+    Env -->|"hidden future"| Reward
+    Reward -->|"decomposed reward"| Env
+    Env -->|"observation + peer review"| Agent
+    
+    Universe["ProceduralAlienUniverse"] -->|"sensor records"| Env
+    Universe -.->|"hidden latent state"| Viz["visualize_discovery.py"]
+```
 
-## Theory Module Example
+## Theory Module API (Python Mode)
+
+For advanced agents, raw Python `Theory` classes are also supported:
 
 ```python
 import math
-
 
 class Theory:
     def fit(self, history):
@@ -157,7 +203,8 @@ class Theory:
         return {"records": len(history)}
 
     def predict(self, window):
-        return [{"sensors": dict(self.last), "anomaly_prob": 0.05} for _ in range(window["steps"])]
+        return [{"sensors": dict(self.last), "anomaly_prob": 0.05}
+                for _ in range(window["steps"])]
 
     def log_prob(self, observations):
         return -float(len(observations))
@@ -166,4 +213,6 @@ class Theory:
         return "Static persistence theory."
 ```
 
-The environment computes the real reward from predictions and hidden future observations; `log_prob` is recorded as theory output but is not trusted as the reward.
+## License
+
+BSD-style license. See LICENSE file.

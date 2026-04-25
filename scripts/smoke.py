@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/tiny_smoke.json")
-    parser.add_argument("--baseline", default="linear", choices=["static", "linear", "teacher", "oracle"])
+    parser.add_argument("--baseline", default="linear", choices=["static", "linear", "teacher", "oracle", "dual_fluid_dsl"])
     parser.add_argument("--steps", type=int, default=3)
     args = parser.parse_args()
 
