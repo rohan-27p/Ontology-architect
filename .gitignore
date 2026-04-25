@@ -2,7 +2,6 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-# artifacts/
 *.egg-info/
 test_results
 .claude/

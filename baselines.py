@@ -143,9 +143,9 @@ DUAL_FLUID_DSL_ORACLE = _json.dumps({
         "C": 0.0,
     },
     "dynamics": {
-        "A": {"linear": {"terms": {"A": -0.3, "B": 0.25}, "bias": 0.0}},
-        "B": {"add": [{"sin": "A"}, {"linear": {"terms": {"A": -0.08}}}]},
-        "C": {"linear": {"terms": {"A": 0.06, "C": -0.12}}},
+        "A": {"add": [{"linear": {"terms": {"A": -0.3}}}, {"mul": [0.5, {"var": "A"}, {"var": "B"}]}]},
+        "B": {"add": [{"mul": [0.4, {"sin": {"var": "t"}}]}, {"mul": [-0.2, {"pow": [{"var": "A"}, 2]}]}]},
+        "C": {"add": [{"mul": [0.15, {"sin": {"mul": [0.4, {"var": "A"}]}}]}, {"linear": {"terms": {"C": -0.12}}}]},
     },
     "observations": {
         "pressure": {"var": "A"},
