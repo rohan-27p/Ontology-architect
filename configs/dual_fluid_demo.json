@@ -5,7 +5,7 @@
     "split": "train",
     "observation_window": 20,
     "future_window": 6,
-    "max_steps": 10,
+    "max_steps": 100,
     "dt": 0.15,
     "sensor_noise": 0.04,
     "process_noise": 0.01,
