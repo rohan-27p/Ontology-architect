@@ -93,6 +93,17 @@ Key observations:
 - **Latent C** activates after the second drift event — the agent must discover this new dimension
 - Red dashed lines mark drift events (hidden from the agent)
 
+## Results: Agent Learning & Reward Curve
+
+The environment evaluates agents by tracking their `total_reward` across episodes, directly capturing their ability to adapt to falsification. The generated reward curve below plots the performance of various baseline agents (Random, Heuristic, and Oracle) over time.
+
+![Reward Curve Plot](artifacts/reward_curve.png)
+
+Key observations:
+- **Phase Transitions**: Highlighted in shaded vertical regions (e.g., green for Normal Science, red for Crisis).
+- **Falsification & Recovery**: When the alien physics undergo a paradigm shift, agents experience a sharp drop in reward (falsification) and must structurally refactor their theories to recover.
+- **Theory Diversity**: The grader actively tracks structural distance between consecutive theories to ensure the agent is not stuck in a local minimum repeating the same flawed equations.
+
 ## How To Run
 
 ### Install Dependencies
