@@ -1,7 +1,19 @@
 spec_version: 1
 name: ontology_architect
+version: 0.1.0
 type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
-
+description: >
+  Ontology Architect: an RL environment for training LLMs to perform
+  unsupervised scientific discovery. Agents observe noisy sensor logs from
+  a simulated alien universe governed by hidden ODEs and must discover
+  compact, predictive theories via iterative hypothesis revision.
+env_class: ontology_architect.server.ontology_architect_environment.OntologyArchitectEnvironment
+tags:
+  - openenv
+  - scientific-discovery
+  - world-modeling
+  - self-improvement
+  - wild-card

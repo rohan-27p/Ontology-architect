@@ -11,10 +11,12 @@ from typing import Any
 try:
     from .config import RewardConfig
     from .sandbox import SandboxResult
+    from .theory_dsl import TheoryDSLValidationError, dsl_complexity, dsl_signature, parse_theory_dsl
     from .universe import SensorRecord, window_has_anomaly, window_has_drift
 except ImportError:  # pragma: no cover
     from config import RewardConfig
     from sandbox import SandboxResult
+    from theory_dsl import TheoryDSLValidationError, dsl_complexity, dsl_signature, parse_theory_dsl
     from universe import SensorRecord, window_has_anomaly, window_has_drift
 
 
@@ -25,6 +27,7 @@ class RewardBreakdown:
     mdl_penalty: float
     anomaly_bonus: float
     drift_bonus: float
+    stability_bonus: float
     execution_ok: bool
     missed_anomaly: bool
     false_paradigm_shift: bool
@@ -79,6 +82,7 @@ def score_theory(
             mdl_penalty=mdl_penalty,
             anomaly_bonus=0.0,
             drift_bonus=0.0,
+            stability_bonus=0.0,
             execution_ok=False,
             missed_anomaly=window_has_anomaly(future),
             false_paradigm_shift=False,
@@ -96,6 +100,7 @@ def score_theory(
             mdl_penalty=mdl_penalty,
             anomaly_bonus=0.0,
             drift_bonus=0.0,
+            stability_bonus=0.0,
             execution_ok=False,
             missed_anomaly=window_has_anomaly(future),
             false_paradigm_shift=False,
@@ -119,13 +124,23 @@ def score_theory(
         structural_delta,
         config.paradigm_shift_min_structural_delta,
     )
-    reward = log_likelihood - mdl_penalty + anomaly_bonus + drift_bonus
+    # Stability bonus: reward incremental refinement, penalize wild swings
+    # unless a paradigm shift is genuinely needed (drift in future window)
+    stability_bonus = 0.0
+    if previous_theory_module is not None:
+        if structural_delta < config.stability_threshold:
+            stability_bonus = config.stability_weight  # small but stable
+        elif not window_has_drift(future):
+            # Large change without drift = unnecessary volatility
+            stability_bonus = -config.stability_weight * structural_delta
+    reward = log_likelihood - mdl_penalty + anomaly_bonus + drift_bonus + stability_bonus
     return RewardBreakdown(
         reward=float(reward),
         log_likelihood=float(log_likelihood),
         mdl_penalty=float(mdl_penalty),
         anomaly_bonus=float(anomaly_bonus),
         drift_bonus=float(drift_bonus),
+        stability_bonus=float(stability_bonus),
         execution_ok=True,
         missed_anomaly=missed_anomaly,
         false_paradigm_shift=false_paradigm_shift,
@@ -215,6 +230,27 @@ def theory_complexity(theory_module: str, mode: str = "ast") -> ComplexityBreakd
             parse_ok=True,
             fallback_chars=len(theory_module),
         )
+    if parse_theory_dsl(theory_module) is not None:
+        try:
+            score = dsl_complexity(theory_module)
+        except TheoryDSLValidationError:
+            score = max(1.0, len(theory_module) / 80.0)
+            parse_ok = False
+        else:
+            parse_ok = True
+        return ComplexityBreakdown(
+            mode="dsl",
+            score=float(score or 1.0),
+            ast_nodes=0,
+            import_count=0,
+            class_count=0,
+            function_count=0,
+            parameter_count=0,
+            branch_count=0,
+            self_state_assignments=0,
+            parse_ok=parse_ok,
+            fallback_chars=0 if parse_ok else len(theory_module),
+        )
     try:
         tree = ast.parse(theory_module)
     except SyntaxError:
@@ -270,10 +306,24 @@ def theory_complexity(theory_module: str, mode: str = "ast") -> ComplexityBreakd
 def theory_structural_distance(theory_module: str, previous_theory_module: str | None) -> float:
     if not previous_theory_module:
         return 1.0
+    try:
+        current_dsl = dsl_signature(theory_module)
+        previous_dsl = dsl_signature(previous_theory_module)
+    except TheoryDSLValidationError:
+        current_dsl = None
+        previous_dsl = None
+    if current_dsl is not None or previous_dsl is not None:
+        if current_dsl is None or previous_dsl is None:
+            return 1.0
+        return _counter_distance(Counter(current_dsl), Counter(previous_dsl))
     current = _ast_feature_counts(theory_module)
     previous = _ast_feature_counts(previous_theory_module)
     if not current and not previous:
         return 0.0 if theory_module == previous_theory_module else 1.0
+    return _counter_distance(current, previous)
+
+
+def _counter_distance(current: Counter[str], previous: Counter[str]) -> float:
     keys = set(current) | set(previous)
     numerator = sum(abs(current.get(key, 0) - previous.get(key, 0)) for key in keys)
     denominator = sum(max(current.get(key, 0), previous.get(key, 0)) for key in keys)

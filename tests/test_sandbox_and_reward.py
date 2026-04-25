@@ -1,3 +1,5 @@
+import json
+
 from ontology_architect.baselines import get_baseline
 from ontology_architect.config import RewardConfig, SandboxConfig, UniverseConfig
 from ontology_architect.reward import score_theory, theory_complexity
@@ -12,6 +14,26 @@ def _windows():
     return records[:8], records[8:11]
 
 
+def _dsl_module():
+    return json.dumps(
+        {
+            "dsl_version": 1,
+            "name": "sensor persistence DSL",
+            "state": ["sigma", "tau", "lambda"],
+            "dynamics": {"sigma": 0.0, "tau": 0.0, "lambda": 0.0},
+            "observations": {
+                "sigma": {"var": "sigma"},
+                "tau": {"var": "tau"},
+                "lambda": {"var": "lambda"},
+            },
+            "fit": {"lookback": 4, "trend_weight": 1.0},
+            "integrator": {"dt": 1.0, "substeps": 1},
+            "noise": 0.12,
+        },
+        sort_keys=True,
+    )
+
+
 def test_sandbox_executes_valid_theory():
     history, future = _windows()
     result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
@@ -23,6 +45,41 @@ def test_sandbox_executes_valid_theory():
 
     assert result.ok
     assert len(result.predictions) == len(future)
+
+
+def test_sandbox_executes_structured_theory_dsl():
+    history, future = _windows()
+    result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
+        _dsl_module(),
+        history,
+        future,
+        ("sigma", "tau", "lambda"),
+    )
+
+    assert result.ok
+    assert len(result.predictions) == len(future)
+    assert "Structured Theory DSL" in result.description
+
+
+def test_sandbox_rejects_invalid_theory_dsl_before_execution():
+    history, future = _windows()
+    invalid_dsl = json.dumps(
+        {
+            "dsl_version": 1,
+            "state": ["sigma"],
+            "observations": {"sigma": {"var": "unknown_latent"}},
+        }
+    )
+
+    result = TheorySandbox(SandboxConfig(timeout_seconds=3.0)).execute(
+        invalid_dsl,
+        history,
+        future,
+        ("sigma", "tau", "lambda"),
+    )
+
+    assert not result.ok
+    assert "TheoryDSLValidationError" in result.error
 
 
 def test_sandbox_rejects_disallowed_import():
@@ -96,6 +153,13 @@ def test_ast_mdl_ignores_comments_and_whitespace():
     padded = "# explanatory comment\n\nclass Theory:\n\n    pass\n"
 
     assert theory_complexity(compact).score == theory_complexity(padded).score
+
+
+def test_dsl_mdl_uses_semantic_complexity():
+    complexity = theory_complexity(_dsl_module())
+
+    assert complexity.mode == "dsl"
+    assert complexity.score > 0.0
 
 
 def test_drift_bonus_requires_structural_change_for_repeated_theory():
