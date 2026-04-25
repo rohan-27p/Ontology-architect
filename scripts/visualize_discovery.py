@@ -73,8 +73,8 @@ def main() -> None:
 
     # Run theory through sandbox to get predictions
     sandbox = TheorySandbox(config.sandbox)
-    # Use first half as history, predict second half
-    split = len(records) // 2
+    # Use a small initial window as history so the oracle can initialize correctly
+    split = 8
     history = records[:split]
     future = records[split:]
 
