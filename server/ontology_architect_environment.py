@@ -128,7 +128,10 @@ class OntologyArchitectEnvironment(Environment):
             "future_horizon": self.config.universe.future_window,
             "sensor_names": list(self._universe.sensor_names),
             "allowed_imports": list(self.config.sandbox.allowed_imports),
-            "theory_api": "class Theory with fit(history), predict(window), log_prob(observations)",
+            "theory_api": (
+                "Either Python class Theory with fit/predict/log_prob, or JSON Theory DSL v1 "
+                "with state/dynamics/observations"
+            ),
             "last_metrics": self._last_metrics,
             "feedback": {
                 "peer_review_window": self.config.feedback.peer_review_window,
@@ -176,6 +179,7 @@ class OntologyArchitectEnvironment(Environment):
             "mdl_penalty": reward.mdl_penalty,
             "anomaly_bonus": reward.anomaly_bonus,
             "drift_bonus": reward.drift_bonus,
+            "stability_bonus": reward.stability_bonus,
             "execution_ok": reward.execution_ok,
             "missed_anomaly": reward.missed_anomaly,
             "false_paradigm_shift": reward.false_paradigm_shift,
@@ -199,6 +203,7 @@ class OntologyArchitectEnvironment(Environment):
             f"mdl_penalty={reward.mdl_penalty:.5f}",
             f"anomaly_bonus={reward.anomaly_bonus:.5f}",
             f"drift_adaptation_bonus={reward.drift_bonus:.5f}",
+            f"stability_bonus={reward.stability_bonus:.5f}",
             f"reported_log_prob={result.reported_log_prob:.5f}",
             f"runtime_ms={result.runtime_ms:.3f}",
         ]

@@ -11,9 +11,11 @@ from typing import Any
 
 try:
     from .config import SandboxConfig
+    from .theory_dsl import TheoryDSLValidationError, render_theory_module
     from .universe import SensorRecord, records_to_json
 except ImportError:  # pragma: no cover
     from config import SandboxConfig
+    from theory_dsl import TheoryDSLValidationError, render_theory_module
     from universe import SensorRecord, records_to_json
 
 
@@ -44,8 +46,21 @@ class TheorySandbox:
         future: list[SensorRecord],
         sensor_names: tuple[str, ...],
     ) -> SandboxResult:
+        try:
+            executable_theory_module = render_theory_module(theory_module)
+        except TheoryDSLValidationError as exc:
+            return SandboxResult(
+                ok=False,
+                error=f"TheoryDSLValidationError: {exc}",
+                stdout="",
+                predictions=[],
+                reported_log_prob=float("-inf"),
+                description="",
+                drift_detected=False,
+                runtime_ms=0.0,
+            )
         payload = {
-            "theory_module": theory_module,
+            "theory_module": executable_theory_module,
             "history": records_to_json(history),
             "future": records_to_json(future),
             "sensor_names": list(sensor_names),

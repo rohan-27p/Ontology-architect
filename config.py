@@ -59,6 +59,8 @@ class RewardConfig:
     paradigm_shift_min_structural_delta: float = 0.15
     execution_error_penalty: float = -25.0
     max_theory_chars: int = 12000
+    stability_weight: float = 0.3
+    stability_threshold: float = 0.2
 
 
 @dataclass(frozen=True)
