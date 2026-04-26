@@ -22,7 +22,7 @@ def generate_oracle_curriculum(
     config: ExperimentConfig,
     output_path: str | Path,
     episodes: int = 3,
-    teacher_name: str = "teacher",
+    teacher_name: str = "dual_fluid_dsl",
 ) -> list[dict]:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -8,13 +8,23 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .baselines import DUAL_FLUID_DSL_ORACLE
     from .curriculum import read_jsonl
     from .models import OntologyArchitectAction
     from .server.ontology_architect_environment import OntologyArchitectEnvironment
 except ImportError:  # pragma: no cover
+    from baselines import DUAL_FLUID_DSL_ORACLE
     from curriculum import read_jsonl
     from models import OntologyArchitectAction
     from server.ontology_architect_environment import OntologyArchitectEnvironment
+
+# Few-shot oracle prefix injected into every GRPO prompt to seed DSL format.
+# Truncated to ~400 chars so it fits within the context budget.
+_FEW_SHOT_PREFIX = (
+    "EXAMPLE VALID THEORY (JSON DSL format):\n"
+    + DUAL_FLUID_DSL_ORACLE[:400]
+    + "\n...\n\n"
+)
 
 
 def write_sft_manifest(
@@ -179,13 +189,20 @@ def run_group_reward_optimization(
     with reward_log_path.open("w", encoding="utf-8") as reward_log:
         for step in range(max_steps):
             prompt_env = OntologyArchitectEnvironment(config)
-            prompt = prompt_env.reset().text + "\n\n# THEORY MODULE\n"
+            # Inject few-shot DSL oracle prefix + DSL opening to force JSON format
+            # from the very first generated token. This eliminates the "prose collapse"
+            # where the model generates English text instead of valid DSL JSON.
+            prompt = (
+                _FEW_SHOT_PREFIX
+                + prompt_env.reset().text
+                + '\n\n# THEORY MODULE\n{"dsl_version": 1, "name": "'
+            )
             encoded = tokenizer([prompt] * group_size, return_tensors="pt", padding=True).to(device)
             prompt_len = encoded["input_ids"].shape[1]
             generated = model.generate(
                 **encoded,
                 do_sample=True,
-                temperature=0.8,
+                temperature=1.2,  # Higher temperature for diversity — GRPO needs varied samples to rank
                 max_new_tokens=max_new_tokens,
                 pad_token_id=tokenizer.pad_token_id,
             )
@@ -204,7 +221,33 @@ def run_group_reward_optimization(
                 rewards.append(float(observation.reward or 0.0))
 
             reward_tensor = torch.tensor(rewards, dtype=torch.float32, device=device)
+
+            # Zero-gradient guard: when all rewards are identical (e.g. all -25.0
+            # on an all-invalid step), advantages collapse to zero and no gradient
+            # flows. Skip the backward pass entirely — there is no ranking signal.
+            if reward_tensor.std() < 1e-6:
+                valid_rewards = [r for r in rewards if r > -20]
+                row = {
+                    "step": step,
+                    "rewards": rewards,
+                    "mean_reward": float(reward_tensor.mean()),
+                    "loss": 0.0,
+                    "best_reward": max(valid_rewards) if valid_rewards else -25.0,
+                    "valid_rate": len(valid_rewards) / len(rewards),
+                    "skipped": True,
+                }
+                reward_log.write(json.dumps(row, sort_keys=True) + "\n")
+                reward_log.flush()
+                reward_history.append(row)
+                print(f"[Step {step:3d}/{max_steps}] SKIPPED (all rewards identical, no ranking signal) valid={row['valid_rate']:.0%}")
+                if wandb_run:
+                    wandb_run.log({"grpo/skipped": 1, "grpo/valid_rate": row["valid_rate"]}, step=step)
+                continue
+
+            # Normalize advantages for stable gradient scale
             advantages = reward_tensor - reward_tensor.mean()
+            advantages = advantages / (advantages.std() + 1e-8)
+
             logits = model(generated).logits[:, :-1, :]
             targets = generated[:, 1:]
             token_log_probs = torch.log_softmax(logits, dim=-1).gather(
@@ -226,8 +269,9 @@ def run_group_reward_optimization(
                 "rewards": rewards,
                 "mean_reward": float(reward_tensor.mean().detach().cpu()),
                 "loss": float(loss.detach().cpu()),
-                "best_reward": min(rewards) if valid_rewards else -25.0,
+                "best_reward": max(valid_rewards) if valid_rewards else -25.0,  # max = highest reward (least negative)
                 "valid_rate": len(valid_rewards) / len(rewards),
+                "skipped": False,
             }
             reward_log.write(json.dumps(row, sort_keys=True) + "\n")
             reward_log.flush()
@@ -286,7 +330,18 @@ def require_trl_gro() -> None:
 
 
 def _extract_completion(decoded_text: str) -> str:
+    """Extract the theory module text that follows the # THEORY MODULE marker.
+
+    Because we inject a partial DSL opening ('{"dsl_version": 1, "name": "') into
+    the prompt, the extracted text already begins mid-JSON. The sandbox's DSL parser
+    will handle this correctly as long as the JSON is complete after the marker.
+    """
     marker = "# THEORY MODULE"
     if marker in decoded_text:
         return decoded_text.split(marker, 1)[1].strip()
-    return decoded_text.strip()
+    # Fallback: if marker was never generated, try to find any JSON object
+    stripped = decoded_text.strip()
+    brace = stripped.find("{")
+    if brace != -1:
+        return stripped[brace:]
+    return stripped

@@ -17,7 +17,7 @@ def main() -> None:
     parser.add_argument("--config", default="configs/tiny_smoke.json")
     parser.add_argument("--output", default="artifacts/curriculum/oracle.jsonl")
     parser.add_argument("--episodes", type=int, default=3)
-    parser.add_argument("--teacher", default="teacher")
+    parser.add_argument("--teacher", default="dual_fluid_dsl")
     args = parser.parse_args()
 
     config = load_config(args.config)
