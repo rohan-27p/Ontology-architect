@@ -1,7 +1,3 @@
-Got it — I’ll paste the full **Blog.md content here** so you can copy it directly 👇
-
----
-
 # 🧠 Ontology Architect
 
 ### Autonomous Scientific Discovery in Non-Stationary Worlds
@@ -184,27 +180,25 @@ This approach is useful in domains where:
 
 ## 📊 Training Results
 
-> *(To be filled as experiments progress)*
+## Overview
 
-### 1. Loss Curve
+![Training Overview](artifacts/results/training_overview.png)
 
-* Plot: Training loss vs iterations
+## Discovery
 
-### 2. Reward Curve
+![Discovery Plot](artifacts/results/discovery_plot.png)
 
-* Plot: MDL-based reward over time
+### 1. GRPO Traning Curve
 
-### 3. Prediction vs Ground Truth
+![Grpo Training Curve](artifacts/results/grpo_training_curve.png)
 
-* Visualization of model predictions against actual observations
+### 2. SFT Loss Curve
 
-### 4. Theory Complexity
+![SFT Training Curve](artifacts/results/sft_training_loss.png)
 
-* Graph showing complexity vs performance tradeoff
+### 3. Reward Curve
 
-### 5. Regime Shift Adaptation
-
-* Before vs after paradigm shift performance
+![Reward Curve](artifacts/results/reward_curve.png)
 
 ---
 
@@ -244,10 +238,3 @@ Ontology Architect is a step toward systems that:
 
 Built as part of a hackathon exploring the future of AI-driven scientific discovery.
 
----
-
-If you want, I can next:
-
-* polish this into a **top-tier GitHub README**
-* add **badges + diagrams**
-* or help you embed **actual plots automatically from training logs**
