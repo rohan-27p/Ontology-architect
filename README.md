@@ -19,7 +19,7 @@ Ontology Architect is an OpenEnv-compatible RL environment that challenges LLM a
 
 **→ [🤗 HuggingFace Space (Environment)](https://huggingface.co/spaces/LostDecimal/ontology-architect)**  
 **→ [📓 Colab Training Notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb)**  
-**→ [💻 GitHub Repository](https://github.com/rohan-27p/ontology_architect)**  
+**→ [💻 GitHub Repository](https://github.com/rohan-27p/Ontology-architect)**  
 **→ [🤖 Trained Model (HuggingFace)](https://huggingface.co/LostDecimal/alien-physics-qwen2.5-1.5b)**
 
 ---
