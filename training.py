@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Any
@@ -69,6 +70,7 @@ def run_transformers_sft(
     output_dir: str | Path,
     max_steps: int,
     batch_size: int,
+    use_wandb: bool = True,
 ) -> Any:
     try:
         from datasets import Dataset
@@ -87,18 +89,34 @@ def run_transformers_sft(
 
     def format_row(row: dict) -> dict:
         text = row["prompt"] + "\n\n# THEORY MODULE\n" + row["completion"]
-        tokens = tokenizer(text, truncation=True, max_length=2048)
-        tokens["labels"] = list(tokens["input_ids"])
+        tokens = tokenizer(text, truncation=True, max_length=2048, padding="max_length")
+        tokens["labels"] = [
+            t if t != tokenizer.pad_token_id else -100 
+            for t in tokens["input_ids"]
+        ]
         return tokens
 
     dataset = Dataset.from_list(examples).map(format_row, remove_columns=list(examples[0]))
+
+    # Experiment tracking: wandb if available, else none
+    report_to = []
+    if use_wandb:
+        try:
+            import wandb  # noqa: F401
+            report_to = ["wandb"]
+            import os
+            os.environ.setdefault("WANDB_PROJECT", "ontology-architect")
+            os.environ.setdefault("WANDB_RUN_NAME", "sft-theory-dsl")
+        except ImportError:
+            pass
+
     args = TrainingArguments(
         output_dir=str(output_dir),
         per_device_train_batch_size=batch_size,
         max_steps=max_steps,
         logging_steps=1,
         save_steps=max(1, max_steps),
-        report_to=[],
+        report_to=report_to,
     )
     trainer = Trainer(model=model, args=args, train_dataset=dataset)
     trainer.train()
@@ -113,9 +131,10 @@ def run_group_reward_optimization(
     output_dir: str | Path,
     group_size: int,
     max_steps: int,
-    max_new_tokens: int = 768,
+    max_new_tokens: int = 384,
     learning_rate: float = 1e-6,
     checkpoint_steps: int | None = None,
+    use_wandb: bool = True,
 ) -> dict:
     try:
         import torch
@@ -130,13 +149,30 @@ def run_group_reward_optimization(
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_id)
+    tokenizer.padding_side = "left"  # Crucial for causal LM batched generation
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     model.train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     checkpoint_steps = checkpoint_steps if checkpoint_steps is not None else getattr(config.training, "checkpoint_steps", 0)
     checkpoint_steps = max(0, int(checkpoint_steps))
+
+    # Experiment tracking
+    wandb_run = None
+    if use_wandb:
+        try:
+            import wandb
+            wandb_run = wandb.init(
+                project="ontology-architect",
+                name="grpo-theory-discovery",
+                config={"model_id": model_id, "group_size": group_size,
+                        "max_steps": max_steps, "lr": learning_rate,
+                        "max_new_tokens": max_new_tokens},
+                reinit=True,
+            )
+        except ImportError:
+            pass
 
     reward_history = []
     last_checkpoint = ""
@@ -184,15 +220,31 @@ def run_group_reward_optimization(
             loss.backward()
             optimizer.step()
 
+            valid_rewards = [r for r in rewards if r > -20]
             row = {
                 "step": step,
                 "rewards": rewards,
                 "mean_reward": float(reward_tensor.mean().detach().cpu()),
                 "loss": float(loss.detach().cpu()),
+                "best_reward": min(rewards) if valid_rewards else -25.0,
+                "valid_rate": len(valid_rewards) / len(rewards),
             }
             reward_log.write(json.dumps(row, sort_keys=True) + "\n")
             reward_log.flush()
             reward_history.append(row)
+
+            # Log to wandb
+            if wandb_run:
+                wandb_run.log({
+                    "grpo/loss": row["loss"],
+                    "grpo/mean_reward": row["mean_reward"],
+                    "grpo/best_reward": row["best_reward"],
+                    "grpo/valid_rate": row["valid_rate"],
+                    "grpo/mean_valid_reward": sum(valid_rewards) / len(valid_rewards) if valid_rewards else -25.0,
+                }, step=step)
+
+            # Print progress
+            print(f"[Step {step:3d}/{max_steps}] loss={row['loss']:.4f} mean_reward={row['mean_reward']:.2f} best={row['best_reward']:.2f} valid={row['valid_rate']:.0%}")
             if checkpoint_steps and (step + 1) % checkpoint_steps == 0:
                 checkpoint_dir = output / f"checkpoint-{step + 1}"
                 checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -210,6 +262,11 @@ def run_group_reward_optimization(
 
     model.save_pretrained(str(output))
     tokenizer.save_pretrained(str(output))
+
+    # Finalize experiment tracking
+    if wandb_run:
+        wandb_run.finish()
+
     return {
         "stage": "group_reward_optimization",
         "model_id": model_id,

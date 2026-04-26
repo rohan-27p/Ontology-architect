@@ -17,9 +17,10 @@ tags:
 
 Ontology Architect is an OpenEnv-compatible RL environment that challenges LLM agents to perform *unsupervised scientific discovery*. An agent observes noisy sensor logs from a simulated alien universe governed by hidden ODEs and must iteratively write compact theories that predict future observations.
 
-**→ [Colab Training Notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb)**  
-**→ [GitHub Repository](https://github.com/rohan-27p/ontology_architect)**  
-**→ [HuggingFace Space](https://huggingface.co/spaces/lostdecimal27/ontology-architect)**
+**→ [🤗 HuggingFace Space (Environment)](https://huggingface.co/spaces/LostDecimal/ontology-architect)**  
+**→ [📓 Colab Training Notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb)**  
+**→ [💻 GitHub Repository](https://github.com/rohan-27p/ontology_architect)**  
+**→ [🤖 Trained Model (HuggingFace)](https://huggingface.co/LostDecimal/alien-physics-qwen2.5-1.5b)**
 
 ---
 
@@ -81,6 +82,31 @@ The DSL supports: `var`, `const`, `linear`, `add`, `mul`, `sin`, `cos`, `tanh`, 
 | `r_drift` | Sparse | Bonus for adapting when hidden laws shift |
 | `r_stability` | Dense | Rewards incremental refinement, penalizes wild oscillation |
 
+## Training Results
+
+We trained **Qwen2.5-Coder-1.5B-Instruct** on an NVIDIA A100-SXM4-80GB GPU using a two-phase pipeline:
+
+### Phase 1: Supervised Fine-Tuning (SFT)
+
+The model first learns the Theory DSL format by imitating oracle traces from the `dual_fluid` universe. Loss drops from **1.25 → 0.017** in 200 steps (~8.6 min).
+
+![SFT Training Loss](artifacts/results/sft_training_loss.png)
+
+### Phase 2: Group Reward Optimization (GRPO)
+
+Using the SFT-warm-started model, we run GRPO (group_size=4, temperature=1.2) for 50 steps. The model explores diverse theory structures and is rewarded based on real sandbox evaluation.
+
+![GRPO Training Curve](artifacts/results/grpo_training_curve.png)
+
+Key results:
+- **Best single theory reward: -0.94** (72% improvement over SFT baseline of -3.41)
+- Valid theory generation rate: ~75% (up from 0% without SFT)
+- Model discovers improved coefficient values and observation mappings
+
+### Combined Training Overview
+
+![Training Overview](artifacts/results/training_overview.png)
+
 ## Results: Latent Variable Discovery
 
 The following plot shows the environment running with the DSL oracle baseline (purple) vs a static persistence baseline (gray). The top rows show the *true hidden latent variables* (A, B, C) — which the agent never sees. The bottom rows show sensor predictions.
@@ -95,7 +121,7 @@ Key observations:
 
 ## Results: Agent Learning & Reward Curve
 
-The environment evaluates agents by tracking their `total_reward` across episodes, directly capturing their ability to adapt to falsification. The generated reward curve below plots the performance of various baseline agents (Random, Heuristic, and Oracle) over time.
+The environment evaluates agents by tracking their `total_reward` across episodes, directly capturing their ability to adapt to falsification. The generated reward curve below plots the performance of various baseline agents (Random, Heuristic, LLM, and Oracle) over time.
 
 ![Reward Curve Plot](artifacts/results/reward_curve.png)
 
@@ -142,7 +168,7 @@ uv run python -m ontology_architect.scripts.visualize_discovery \
   --config configs/dual_fluid_demo.json \
   --baseline dual_fluid_dsl \
   --compare-baseline static \
-  --output artifacts/discovery_plot.png
+  --output artifacts/results/discovery_plot.png
 ```
 
 ### Training (Colab / GPU)
@@ -150,24 +176,27 @@ uv run python -m ontology_architect.scripts.visualize_discovery \
 See the [Colab notebook](https://colab.research.google.com/github/rohan-27p/ontology_architect/blob/main/Alien_Physics_Discovery_OpenEnv.ipynb) for the full GRPO training pipeline:
 
 ```bash
-# Oracle curriculum generation
-uv run python -m ontology_architect.scripts.generate_curriculum \
+# Step 1: Oracle curriculum generation
+python -m scripts.generate_curriculum \
   --config configs/dual_fluid_demo.json \
   --output artifacts/curriculum/oracle.jsonl \
   --episodes 60
 
-# SFT warm-start
-uv run python -m ontology_architect.scripts.train_sft \
+# Step 2: SFT warm-start (teaches DSL format)
+python -m scripts.train_sft \
   --config configs/dual_fluid_demo.json \
-  --model-id <HF_MODEL_ID> \
-  --data artifacts/curriculum/oracle.jsonl
+  --model-id Qwen/Qwen2.5-Coder-1.5B-Instruct \
+  --data artifacts/curriculum/oracle.jsonl \
+  --output-dir artifacts/sft_checkpoint \
+  --max-steps 200 --batch-size 2
 
-# Group Reward Optimization
-uv run python -m ontology_architect.scripts.train_gro \
+# Step 3: Group Reward Optimization (learns to write better theories)
+python -m scripts.train_gro \
   --config configs/dual_fluid_demo.json \
-  --model-id <HF_MODEL_ID> \
-  --group-size 2 \
-  --max-steps 100
+  --model-id artifacts/sft_checkpoint \
+  --group-size 4 \
+  --max-steps 50 \
+  --output-dir artifacts/checkpoints
 ```
 
 ### Docker
@@ -182,7 +211,7 @@ docker run --rm -p 8000:8000 ontology_architect-env:latest
 | Config | Purpose |
 |---|---|
 | `configs/tiny_smoke.json` | Fast local testing (thermal_split, 3 steps) |
-| `configs/dual_fluid_demo.json` | **Demo showcase** (dual_fluid, 10 steps, paradigm shifts) |
+| `configs/dual_fluid_demo.json` | **Demo showcase** (dual_fluid, 100 steps, paradigm shifts) |
 | `configs/full_research.json` | Extended research benchmarks |
 
 ## Architecture
